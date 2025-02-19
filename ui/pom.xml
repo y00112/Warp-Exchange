@@ -12,10 +12,7 @@
     <!-- 当前模块名称 -->
     <artifactId>ui</artifactId>
     <name>ui</name>
-
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
+    <description>用户Web界面</description>
 
     <dependencies>
         <!-- 依赖SpringCloud Config客户端 -->

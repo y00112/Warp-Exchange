@@ -11,6 +11,12 @@
     <artifactId>config</artifactId>
     <name>config</name>
 
+    <description>
+        Spring Cloud Config支持多种配置方式，包括从本地文件、Git仓库、数据库等多个地方读取配置。这里我们选择以本地文件的方式读取配置文件，这也是最简单的一种配置方式。
+        Config Server：配置服务器，负责读取所有配置；
+        Config Client：嵌入到各个SpringBoot应用中，本地无配置信息，启动时向服务器请求配置。
+    </description>
+
     <dependencies>
         <!-- 依赖SpringCloud Config服务端-->
         <dependency>

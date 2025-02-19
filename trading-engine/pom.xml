@@ -12,6 +12,8 @@
 
     <name>trading-engine</name>
 
+    <description>交易引擎：</description>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.cloud</groupId>

@@ -12,6 +12,8 @@
     <name>common</name>
     <url>http://maven.apache.org</url>
 
+    <description>公共代码:</description>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
