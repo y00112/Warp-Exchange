@@ -24,4 +24,16 @@ public class OrderEntity {
     public long createdAt;
     public long updatedAt;
 
+    private int version;
+
+    // 订单交易对
+    public Long symbolId;
+
+    public void updateOrder(BigDecimal unfilledQuantity,OrderStatus status,long updateAt){
+         this.version++;
+         this.unfilledQuantity = unfilledQuantity;
+         this.status = status;
+         this.updatedAt = updateAt;
+         this.version++;
+    }
 }
