@@ -1,4 +1,4 @@
-package com.zhaoyss.exchange.model.trade;
+package com.zhaoyss.exchange.enums;
 
 public enum Direction {
 

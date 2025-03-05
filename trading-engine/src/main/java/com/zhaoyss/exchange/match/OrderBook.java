@@ -1,10 +1,13 @@
 package com.zhaoyss.exchange.match;
 
-import com.zhaoyss.exchange.model.trade.Direction;
+import com.zhaoyss.exchange.bean.OrderBookItemBean;
+import com.zhaoyss.exchange.enums.Direction;
 import com.zhaoyss.exchange.model.trade.OrderEntity;
-import jakarta.persistence.criteria.Order;
+import jakarta.validation.OverridesAttribute;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.TreeMap;
 
 /**
@@ -47,10 +50,33 @@ public class OrderBook {
     }
 
     public boolean remove(OrderEntity order) {
-        return this.book.remove(new OrderKey(order.sequenceId,order.price)) != null;
+        return this.book.remove(new OrderKey(order.sequenceId, order.price)) != null;
     }
 
     public boolean add(OrderEntity order) {
-        return this.book.put(new OrderKey(order.sequenceId,order.price), order) != null;
+        return this.book.put(new OrderKey(order.sequenceId, order.price), order) != null;
+    }
+
+    public List<OrderBookItemBean> getOrderBook(int maxDepth) {
+        List<OrderBookItemBean> items = new ArrayList<OrderBookItemBean>(maxDepth);
+        OrderBookItemBean prevItem = null;
+        for (OrderKey key : this.book.keySet()) {
+            OrderEntity order = this.book.get(key);
+            if (prevItem == null) {
+                prevItem = new OrderBookItemBean(order.price, order.unfilledQuantity);
+                items.add(prevItem);
+            } else {
+                if (order.price.compareTo(prevItem.price) == 0) {
+                    prevItem.addQuantity(order.unfilledQuantity);
+                } else {
+                    if (items.size() >= maxDepth) {
+                        break;
+                    }
+                    prevItem = new OrderBookItemBean(order.price, order.unfilledQuantity);
+                    items.add(prevItem);
+                }
+            }
+        }
+        return items;
     }
 }

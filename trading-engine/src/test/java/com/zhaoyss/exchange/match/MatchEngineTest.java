@@ -1,7 +1,7 @@
 package com.zhaoyss.exchange.match;
 
 import com.zhaoyss.exchange.enums.OrderStatus;
-import com.zhaoyss.exchange.model.trade.Direction;
+import com.zhaoyss.exchange.enums.Direction;
 import com.zhaoyss.exchange.model.trade.OrderEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

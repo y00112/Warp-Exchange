@@ -2,9 +2,8 @@ package com.zhaoyss.exchange.order;
 
 import com.zhaoyss.exchange.assets.AssetService;
 import com.zhaoyss.exchange.enums.AssetEnum;
-import com.zhaoyss.exchange.model.trade.Direction;
+import com.zhaoyss.exchange.enums.Direction;
 import com.zhaoyss.exchange.model.trade.OrderEntity;
-import jakarta.persistence.criteria.Order;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

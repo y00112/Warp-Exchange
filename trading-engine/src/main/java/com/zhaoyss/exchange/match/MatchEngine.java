@@ -1,14 +1,17 @@
 package com.zhaoyss.exchange.match;
 
+import com.zhaoyss.exchange.bean.OrderBookBean;
 import com.zhaoyss.exchange.enums.OrderStatus;
-import com.zhaoyss.exchange.model.trade.Direction;
+import com.zhaoyss.exchange.enums.Direction;
 import com.zhaoyss.exchange.model.trade.OrderEntity;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
 /**
  * 撮合引擎
  */
+@Component
 public class MatchEngine {
 
     // 买盘
@@ -27,20 +30,19 @@ public class MatchEngine {
         switch (order.direction) {
             case BUY:
                 // 买单与sellBook匹配，最后放入bugBook:
-                return processOrder(sequenceId,order, this.sellBook, this.buyBook);
+                return processOrder(sequenceId, order, this.sellBook, this.buyBook);
             case SELL:
                 // 卖单与buyBook匹配，最后放入sellBook:
-                return processOrder(sequenceId,order, this.buyBook, this.sellBook);
+                return processOrder(sequenceId, order, this.buyBook, this.sellBook);
             default:
                 throw new IllegalArgumentException("Invalid direction.");
         }
     }
 
     /**
-     *
      * @param sequenceId
-     * @param takerOrder 输入订单
-     * @param makerBook 尝试匹配成交的 OrderBook
+     * @param takerOrder  输入订单
+     * @param makerBook   尝试匹配成交的 OrderBook
      * @param anotherBook 未能完全匹配成交后挂单的 OrderBook
      * @return
      */
@@ -91,5 +93,18 @@ public class MatchEngine {
             anotherBook.add(takerOrder);
         }
         return matchResult;
+    }
+
+    public OrderBookBean getOrderBook(int maxDepth) {
+        return new OrderBookBean(this.sequenceId, this.marketPrice, this.buyBook.getOrderBook(maxDepth), this.sellBook.getOrderBook(maxDepth));
+    }
+
+    public void cancel(long ts, OrderEntity order) {
+        OrderBook book = order.direction == Direction.BUY ? this.buyBook : this.sellBook;
+        if (!book.remove(order)) {
+            throw new IllegalArgumentException("Order not found in order book.");
+        }
+        OrderStatus status = order.unfilledQuantity.compareTo(order.quantity) == 0 ? OrderStatus.FULLY_CANCELLED : OrderStatus.PARTIAL_CANCELLED;
+        order.updateOrder(order.unfilledQuantity, status, ts);
     }
 }
