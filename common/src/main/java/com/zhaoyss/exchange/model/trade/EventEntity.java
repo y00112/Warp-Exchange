@@ -1,5 +1,6 @@
 package com.zhaoyss.exchange.model.trade;
 
+import com.zhaoyss.exchange.model.support.EntitySupport;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.apache.ibatis.annotations.Delete;
@@ -14,7 +15,7 @@ import static com.zhaoyss.exchange.model.support.EntitySupport.VAR_CHAR_10000;
 @Data
 @Entity
 @Table(name = "events", uniqueConstraints = @UniqueConstraint(name = "UNI_PREV_ID", columnNames = {"previousId"}))
-public class EventEntity {
+public class EventEntity implements EntitySupport {
 
     /**
      * 主键:已分配

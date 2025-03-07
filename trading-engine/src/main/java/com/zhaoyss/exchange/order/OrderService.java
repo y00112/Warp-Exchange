@@ -8,6 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -91,5 +94,22 @@ public class OrderService {
     // 根据用户ID查询用户所有活动Order，不存在返回null
     public ConcurrentMap<Long, OrderEntity> getActiveOrders(Long userId) {
         return this.userOrders.get(userId);
+    }
+
+    public ConcurrentMap<Long, OrderEntity> getActiveOrders() {
+        return this.activeOrders;
+    }
+
+
+    public void debug() {
+        System.out.println("---------- orders ----------");
+        List<OrderEntity> orders = new ArrayList<>(this.activeOrders.values());
+        Collections.sort(orders);
+        for (OrderEntity order : orders) {
+            System.out.println("  " + order.id + " " + order.direction + " price: " + order.price + " unfilled: "
+                    + order.unfilledQuantity + " quantity: " + order.quantity + " sequenceId: " + order.sequenceId
+                    + " userId: " + order.userId);
+        }
+        System.out.println("---------- // orders ----------");
     }
 }

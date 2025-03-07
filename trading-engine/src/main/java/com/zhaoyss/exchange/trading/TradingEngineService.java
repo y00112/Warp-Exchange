@@ -8,6 +8,7 @@ import com.zhaoyss.exchange.clearing.ClearingService;
 import com.zhaoyss.exchange.enums.AssetEnum;
 import com.zhaoyss.exchange.enums.Direction;
 import com.zhaoyss.exchange.enums.MatchType;
+import com.zhaoyss.exchange.enums.UserType;
 import com.zhaoyss.exchange.match.MatchDetailRecord;
 import com.zhaoyss.exchange.match.MatchEngine;
 import com.zhaoyss.exchange.match.MatchResult;
@@ -19,15 +20,22 @@ import com.zhaoyss.exchange.message.event.OrderCancelEvent;
 import com.zhaoyss.exchange.message.event.OrderRequestEvent;
 import com.zhaoyss.exchange.message.event.TransferEvent;
 import com.zhaoyss.exchange.messaging.MessageConsumer;
+import com.zhaoyss.exchange.messaging.MessageProducer;
+import com.zhaoyss.exchange.messaging.Messaging;
 import com.zhaoyss.exchange.messaging.MessagingFactory;
 import com.zhaoyss.exchange.model.quotation.TickEntity;
 import com.zhaoyss.exchange.model.trade.MatchDetailEntity;
 import com.zhaoyss.exchange.model.trade.OrderEntity;
 import com.zhaoyss.exchange.order.OrderService;
+import com.zhaoyss.exchange.redis.RedisCache;
 import com.zhaoyss.exchange.redis.RedisService;
 import com.zhaoyss.exchange.store.StoreService;
 import com.zhaoyss.exchange.support.LoggerSupport;
+import com.zhaoyss.exchange.util.IpUtil;
+import com.zhaoyss.exchange.util.JsonUtil;
 import io.netty.util.concurrent.PromiseCombiner;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -38,10 +46,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 
@@ -60,19 +65,19 @@ public class TradingEngineService extends LoggerSupport {
     boolean debugMode = false;
 
     @Autowired
-    AssetService assetService;
+    public AssetService assetService;
 
     @Autowired
-    OrderService orderService;
+    public OrderService orderService;
 
     @Autowired
-    MatchEngine matchEngine;
+    public MatchEngine matchEngine;
 
     @Autowired
-    ClearingService clearingService;
+    public ClearingService clearingService;
 
     @Autowired
-    StoreService storeService;
+    public StoreService storeService;
 
     @Autowired(required = false)
     ZoneId zoneId = ZoneId.systemDefault();
@@ -92,6 +97,7 @@ public class TradingEngineService extends LoggerSupport {
     private long lastSequenceId = 0;
 
     private MessageConsumer consumer;
+    private MessageProducer<TickMessage> producer;
 
     private Thread tickThread;
     private Thread notifyThread;
@@ -109,12 +115,188 @@ public class TradingEngineService extends LoggerSupport {
 
     private OrderBookBean latestOrderBook = null;
 
-    // TODO:
+    @PostConstruct
     public void init() {
         this.shaUpdateOrderBookLua = this.redisService.loadScriptFromClassPath("/redis/update-orderbook.lua");
+        this.consumer = this.messagingFactory.createBatchMessageListener(Messaging.Topic.TRADE, IpUtil.getHostId(), this::processMessages);
+        this.producer = this.messagingFactory.createMessageProducer(Messaging.Topic.TICK, TickMessage.class);
+        this.tickThread = new Thread(this::runTickThread, "async-tick");
+        this.tickThread.start();
+        this.notifyThread = new Thread(this::runNotifyThread, "async-notify");
+        this.notifyThread.start();
+        this.orderBookThread = new Thread(this::runOrderBookThread, "async-orderbook");
+        this.orderBookThread.start();
+        this.apiResultThread = new Thread(this::runApiResultThread, "async-api-result");
+        this.apiResultThread.start();
+        this.dbThread = new Thread(this::runDbThread, "async-db");
+        this.dbThread.start();
     }
 
-    void processMessages(List<AbstractEvent> messages) {
+    @PreDestroy
+    public void destroy() {
+        this.consumer.stop();
+        this.orderBookThread.interrupt();
+        this.dbThread.interrupt();
+    }
+
+    private void runDbThread() {
+        logger.info("start batch insert to db...");
+        for (; ; ) {
+            try {
+                saveToDb();
+            } catch (InterruptedException e) {
+                logger.warn("{} was interrupted.", Thread.currentThread().getName());
+                break;
+            }
+        }
+    }
+
+    // called by dbExecutor thread only:
+    private void saveToDb() throws InterruptedException {
+        if (!matchQueue.isEmpty()) {
+            List<MatchDetailEntity> batch = new ArrayList<>(1000);
+            for (; ; ) {
+                List<MatchDetailEntity> matches = matchQueue.poll();
+                if (matches != null) {
+                    batch.addAll(matches);
+                    if (batch.size() >= 1000) {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            batch.sort(MatchDetailEntity::compareTo);
+            if (logger.isDebugEnabled()) {
+                logger.debug("batch insert {} match details...", batch.size());
+            }
+            this.storeService.insertIgnore(batch);
+        }
+        if (!orderQueue.isEmpty()) {
+            List<OrderEntity> batch = new ArrayList<>(1000);
+            for (; ; ) {
+                List<OrderEntity> orders = orderQueue.poll();
+                if (orders != null) {
+                    batch.addAll(orders);
+                    if (batch.size() >= 1000) {
+                        break;
+                    }
+                }
+                {
+                    break;
+                }
+            }
+            batch.sort(OrderEntity::compareTo);
+            if (logger.isDebugEnabled()) {
+                this.storeService.insertIgnore(batch);
+            }
+        }
+        if (matchQueue.isEmpty()) {
+            Thread.sleep(1);
+        }
+    }
+
+    private void runApiResultThread() {
+        logger.info("start publish api result to redis...");
+        for (; ; ) {
+            ApiResultMessage result = this.apiResultQueue.poll();
+            if (result != null) {
+                redisService.publish(RedisCache.Topic.TRADING_API_RESULT, JsonUtil.writeJson(result));
+            } else {
+                // 无推送时，暂停1ms：
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    logger.warn("{} was interrupted.", Thread.currentThread().getName());
+                    break;
+                }
+            }
+        }
+    }
+
+    private void runOrderBookThread() {
+        logger.info("start update orderbook snapshot to redis...");
+        long lastSequenceId = 0;
+        for (; ; ) {
+            // 获取OrderBookBean的引用，确保后续操作针对局部变量而非成员变量：
+            final OrderBookBean orderBook = this.latestOrderBook;
+            // 仅在OrderBookBean跟新后刷新Redis：
+            if (orderBook != null && orderBook.sequenceId > lastSequenceId) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("update orderbook snapshot at sequence id {}...", orderBook.sequenceId);
+                }
+                redisService.executeScriptReturnBoolean(this.shaUpdateOrderBookLua,
+                        //keys:[cache-key]
+                        new String[]{RedisCache.Key.ORDER_BOOK},
+                        // args: [sequenceId, json-data]
+                        new String[]{String.valueOf(orderBook.sequenceId), JsonUtil.writeJson(orderBook)}
+                );
+                lastSequenceId = orderBook.sequenceId;
+            } else {
+                // 无更新时，暂停1ms:
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    logger.warn("{} was interrupted.", Thread.currentThread().getName());
+                    break;
+                }
+            }
+
+        }
+    }
+
+    private void runNotifyThread() {
+        logger.info("start publish notify to redis...");
+        for (; ; ) {
+            NotificationMessage msg = this.notificationQueue.poll();
+            if (msg != null) {
+                redisService.publish(RedisCache.Topic.NOTIFICATION, JsonUtil.writeJson(msg));
+            } else {
+                // 无推送时，暂停1ms;
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    logger.warn("{} was interrupted.", Thread.currentThread().getName());
+                    break;
+                }
+            }
+        }
+    }
+
+    private void runTickThread() {
+        logger.info("start tick thread...");
+        for (; ; ) {
+            List<TickMessage> msgs = new ArrayList<>();
+            for (; ; ) {
+                TickMessage msg = tickQueue.poll();
+                if (msg != null) {
+                    msgs.add(msg);
+                    if (msgs.size() >= 1000) {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if (!msgs.isEmpty()) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("send {} tick messages...", msgs.size());
+
+                }
+                this.producer.sendMessage(msgs);
+            } else {
+                // 无 TickMessage时，暂停1ms：
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    logger.warn("{} was interrupted.", Thread.currentThread().getName());
+                    break;
+                }
+            }
+        }
+    }
+
+    public void processMessages(List<AbstractEvent> messages) {
         this.orderBookChanged = false;
         for (AbstractEvent message : messages) {
             processEvent(message);
@@ -125,7 +307,7 @@ public class TradingEngineService extends LoggerSupport {
         }
     }
 
-    void processEvent(AbstractEvent event) {
+    public void processEvent(AbstractEvent event) {
         if (this.fatalError) {
             return;
         }
@@ -187,31 +369,134 @@ public class TradingEngineService extends LoggerSupport {
 
     }
 
-    // TODO：
     public void debug() {
-        System.out.println("========= trading engine =========");
-
-        System.out.println("========= // trading engine =========");
-
+        System.out.println("========== trading engine ==========");
+        this.assetService.debug();
+        this.orderService.debug();
+        this.matchEngine.debug();
+        System.out.println("========== // trading engine ==========");
     }
 
-    // TODO:
     void validate() {
         logger.debug("start validate...");
         validateAssets();
-//        validateOrders();
-//        validateMatchEngine();
-        logger.debug("end validate...");
+        validateOrders();
+        validateMatchEngine();
+        logger.debug("validate ok.");
     }
 
-    // TODO:
-    private void validateAssets() {
-        // 验证系统资产完整性：
+    void validateAssets() {
+        // 验证系统资产完整性:
         BigDecimal totalUSD = BigDecimal.ZERO;
         BigDecimal totalBTC = BigDecimal.ZERO;
-        this.assetService.getUserAssets().entrySet();
         for (Map.Entry<Long, ConcurrentMap<AssetEnum, Asset>> userEntry : this.assetService.getUserAssets().entrySet()) {
-            return;
+            Long userId = userEntry.getKey();
+            ConcurrentMap<AssetEnum, Asset> assets = userEntry.getValue();
+            for (Map.Entry<AssetEnum, Asset> entry : assets.entrySet()) {
+                AssetEnum assetId = entry.getKey();
+                Asset asset = entry.getValue();
+                if (userId.longValue() == UserType.DEBT.getInternalUserId()) {
+                    // 系统负债账户available不允许为正:
+                    require(asset.getAvailable().signum() <= 0, "Debt has positive available: " + asset);
+                    // 系统负债账户frozen必须为0:
+                    require(asset.getFrozen().signum() == 0, "Debt has non-zero frozen: " + asset);
+                } else {
+                    // 交易用户的available/frozen不允许为负数:
+                    require(asset.getAvailable().signum() >= 0, "Trader has negative available: " + asset);
+                    require(asset.getFrozen().signum() >= 0, "Trader has negative frozen: " + asset);
+                }
+                switch (assetId) {
+                    case USD -> {
+                        totalUSD = totalUSD.add(asset.getTotal());
+                    }
+                    case BTC -> {
+                        totalBTC = totalBTC.add(asset.getTotal());
+                    }
+                    default -> require(false, "Unexpected asset id: " + assetId);
+                }
+            }
+        }
+        // 各类别资产总额为0:
+        require(totalUSD.signum() == 0, "Non zero USD balance: " + totalUSD);
+        require(totalBTC.signum() == 0, "Non zero BTC balance: " + totalBTC);
+    }
+
+    void validateOrders() {
+        // 验证订单:
+        Map<Long, Map<AssetEnum, BigDecimal>> userOrderFrozen = new HashMap<>();
+        for (Map.Entry<Long, OrderEntity> entry : this.orderService.getActiveOrders().entrySet()) {
+            OrderEntity order = entry.getValue();
+            require(order.unfilledQuantity.signum() > 0, "Active order must have positive unfilled amount: " + order);
+            switch (order.direction) {
+                case BUY -> {
+                    // 订单必须在MatchEngine中:
+                    require(this.matchEngine.buyBook.exist(order), "order not found in buy book: " + order);
+                    // 累计冻结的USD:
+                    userOrderFrozen.putIfAbsent(order.userId, new HashMap<>());
+                    Map<AssetEnum, BigDecimal> frozenAssets = userOrderFrozen.get(order.userId);
+                    frozenAssets.putIfAbsent(AssetEnum.USD, BigDecimal.ZERO);
+                    BigDecimal frozen = frozenAssets.get(AssetEnum.USD);
+                    frozenAssets.put(AssetEnum.USD, frozen.add(order.price.multiply(order.unfilledQuantity)));
+                }
+                case SELL -> {
+                    // 订单必须在MatchEngine中:
+                    require(this.matchEngine.sellBook.exist(order), "order not found in sell book: " + order);
+                    // 累计冻结的BTC:
+                    userOrderFrozen.putIfAbsent(order.userId, new HashMap<>());
+                    Map<AssetEnum, BigDecimal> frozenAssets = userOrderFrozen.get(order.userId);
+                    frozenAssets.putIfAbsent(AssetEnum.BTC, BigDecimal.ZERO);
+                    BigDecimal frozen = frozenAssets.get(AssetEnum.BTC);
+                    frozenAssets.put(AssetEnum.BTC, frozen.add(order.unfilledQuantity));
+                }
+                default -> require(false, "Unexpected order direction: " + order.direction);
+            }
+        }
+        // 订单冻结的累计金额必须和Asset冻结一致:
+        for (Map.Entry<Long, ConcurrentMap<AssetEnum, Asset>> userEntry : this.assetService.getUserAssets().entrySet()) {
+            Long userId = userEntry.getKey();
+            ConcurrentMap<AssetEnum, Asset> assets = userEntry.getValue();
+            for (Map.Entry<AssetEnum, Asset> entry : assets.entrySet()) {
+                AssetEnum assetId = entry.getKey();
+                Asset asset = entry.getValue();
+                if (asset.getFrozen().signum() > 0) {
+                    Map<AssetEnum, BigDecimal> orderFrozen = userOrderFrozen.get(userId);
+                    require(orderFrozen != null, "No order frozen found for user: " + userId + ", asset: " + asset);
+                    BigDecimal frozen = orderFrozen.get(assetId);
+                    require(frozen != null, "No order frozen found for asset: " + asset);
+                    require(frozen.compareTo(asset.getFrozen()) == 0,
+                            "Order frozen " + frozen + " is not equals to asset frozen: " + asset);
+                    // 从userOrderFrozen中删除已验证的Asset数据:
+                    orderFrozen.remove(assetId);
+                }
+            }
+        }
+        // userOrderFrozen不存在未验证的Asset数据:
+        for (Map.Entry<Long, Map<AssetEnum, BigDecimal>> userEntry : userOrderFrozen.entrySet()) {
+            Long userId = userEntry.getKey();
+            Map<AssetEnum, BigDecimal> frozenAssets = userEntry.getValue();
+            require(frozenAssets.isEmpty(), "User " + userId + " has unexpected frozen for order: " + frozenAssets);
+        }
+    }
+
+    void validateMatchEngine() {
+        // OrderBook的Order必须在ActiveOrders中:
+        Map<Long, OrderEntity> copyOfActiveOrders = new HashMap<>(this.orderService.getActiveOrders());
+        for (OrderEntity order : this.matchEngine.buyBook.book.values()) {
+            require(copyOfActiveOrders.remove(order.id) == order,
+                    "Order in buy book is not in active orders: " + order);
+        }
+        for (OrderEntity order : this.matchEngine.sellBook.book.values()) {
+            require(copyOfActiveOrders.remove(order.id) == order,
+                    "Order in sell book is not in active orders: " + order);
+        }
+        // activeOrders的所有Order必须在Order Book中:
+        require(copyOfActiveOrders.isEmpty(), "Not all active orders are in order book.");
+    }
+
+    void require(boolean condition, String errorMessage) {
+        if (!condition) {
+            logger.error("validate failed: {}", errorMessage);
+            panic();
         }
     }
 

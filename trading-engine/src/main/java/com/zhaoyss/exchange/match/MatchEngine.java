@@ -107,4 +107,14 @@ public class MatchEngine {
         OrderStatus status = order.unfilledQuantity.compareTo(order.quantity) == 0 ? OrderStatus.FULLY_CANCELLED : OrderStatus.PARTIAL_CANCELLED;
         order.updateOrder(order.unfilledQuantity, status, ts);
     }
+
+    public void debug() {
+        System.out.println("---------- match engine ----------");
+        System.out.println(this.sellBook);
+        System.out.println("  ----------");
+        System.out.println("  " + this.marketPrice);
+        System.out.println("  ----------");
+        System.out.println(this.buyBook);
+        System.out.println("---------- // match engine ----------");
+    }
 }

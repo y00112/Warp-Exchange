@@ -79,4 +79,8 @@ public class OrderBook {
         }
         return items;
     }
+
+    public boolean exist(OrderEntity order) {
+        return this.book.containsKey(new OrderKey(order.sequenceId, order.price));
+    }
 }

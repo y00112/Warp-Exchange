@@ -1,5 +1,7 @@
 package com.zhaoyss.exchange.assets;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.math.BigDecimal;
 
 public class Asset {
@@ -39,4 +41,10 @@ public class Asset {
     public String toString() {
         return String.format("[available=%04.2f, frozen=%04.2f]", available, frozen);
     }
+
+    @JsonIgnore
+    public BigDecimal getTotal() {
+        return available.add(frozen);
+    }
+
 }

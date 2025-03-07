@@ -1,13 +1,13 @@
 package com.zhaoyss.exchange.store;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
-import com.zhaoyss.exchange.mapper.EventMapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.zhaoyss.exchange.mapper.GenericService;
 import com.zhaoyss.exchange.message.event.AbstractEvent;
 import com.zhaoyss.exchange.messaging.MessageTypes;
+import com.zhaoyss.exchange.model.support.EntitySupport;
 import com.zhaoyss.exchange.model.trade.EventEntity;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,13 +26,20 @@ public class StoreService {
     @Autowired
     MessageTypes messageTypes;
 
+
     @Autowired
-    EventMapper eventMapper;
+    GenericService genericService;
 
     public List<AbstractEvent> loadEventsFromDb(long lastEventId) {
-        List<EventEntity> events = this.eventMapper.selectList(new LambdaQueryWrapper<EventEntity>().
+        BaseMapper<EventEntity> mapper = genericService.getMapperRegistry().getMapper(EventEntity.class);
+        List<EventEntity> events = mapper.selectList(new LambdaQueryWrapper<EventEntity>().
                 eq(EventEntity::getSequenceId, lastEventId)
                 .orderByDesc(EventEntity::getSequenceId));
+
         return events.stream().map(event -> (AbstractEvent) messageTypes.deserialize(event.data)).collect(Collectors.toList());
+    }
+
+    public void insertIgnore(List<? extends EntitySupport> list) {
+        this.genericService.insertIgnore(list);
     }
 }
