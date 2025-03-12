@@ -12,5 +12,5 @@
 - SpringBoot 3.x
 - 微服务 SpringCloud 2023.0.0
 - 数据库 MySQL 8.x
-- 消息系统 Kafaka 3.x
+- 消息系统 Kafka 3.x
 - 缓存系统 Redis 6.x
