@@ -12,7 +12,7 @@ import java.util.List;
  * @description:
  */
 @Service
-public class GenericService {
+public class GenericDbService {
 
     @Autowired
     private MapperRegistry mapperRegistry;

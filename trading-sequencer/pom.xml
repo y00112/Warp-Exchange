@@ -8,12 +8,9 @@
         <relativePath>../parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>trading-engine</artifactId>
-
-    <name>trading-engine</name>
-
-    <description>交易引擎包含：资产，订单，撮合引擎，清算引擎</description>
-
+    <artifactId>trading-sequencer</artifactId>
+    <name>trading-sequencer</name>
+    <description>定序系统：完成订单排序，给每个订单请求一个全局唯一的递增序列号</description>
     <dependencies>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
@@ -21,13 +18,14 @@
         </dependency>
 
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.zhaoyss</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.validation</groupId>
-            <artifactId>jakarta.validation-api</artifactId>
         </dependency>
     </dependencies>
 

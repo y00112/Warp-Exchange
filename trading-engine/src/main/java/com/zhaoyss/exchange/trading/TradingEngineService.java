@@ -377,7 +377,7 @@ public class TradingEngineService extends LoggerSupport {
         System.out.println("========== // trading engine ==========");
     }
 
-    void validate() {
+    public void validate() {
         logger.debug("start validate...");
         validateAssets();
         validateOrders();

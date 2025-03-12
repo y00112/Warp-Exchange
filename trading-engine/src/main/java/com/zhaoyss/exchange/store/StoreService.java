@@ -2,7 +2,7 @@ package com.zhaoyss.exchange.store;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.zhaoyss.exchange.mapper.GenericService;
+import com.zhaoyss.exchange.mapper.GenericDbService;
 import com.zhaoyss.exchange.message.event.AbstractEvent;
 import com.zhaoyss.exchange.messaging.MessageTypes;
 import com.zhaoyss.exchange.model.support.EntitySupport;
@@ -28,10 +28,10 @@ public class StoreService {
 
 
     @Autowired
-    GenericService genericService;
+    GenericDbService genericDbService;
 
     public List<AbstractEvent> loadEventsFromDb(long lastEventId) {
-        BaseMapper<EventEntity> mapper = genericService.getMapperRegistry().getMapper(EventEntity.class);
+        BaseMapper<EventEntity> mapper = genericDbService.getMapperRegistry().getMapper(EventEntity.class);
         List<EventEntity> events = mapper.selectList(new LambdaQueryWrapper<EventEntity>().
                 eq(EventEntity::getSequenceId, lastEventId)
                 .orderByDesc(EventEntity::getSequenceId));
@@ -40,6 +40,6 @@ public class StoreService {
     }
 
     public void insertIgnore(List<? extends EntitySupport> list) {
-        this.genericService.insertIgnore(list);
+        this.genericDbService.insertIgnore(list);
     }
 }

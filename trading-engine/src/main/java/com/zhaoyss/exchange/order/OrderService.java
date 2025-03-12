@@ -60,7 +60,7 @@ public class OrderService {
         order.createdAt = order.updatedAt = ts;
         // 添加到 ActiveOrders:
         this.activeOrders.put(order.id, order);
-        // 添加到 UserOrders
+        // 添加到UserOrders:
         ConcurrentMap<Long, OrderEntity> uOrders = this.userOrders.get(userId);
         if (uOrders == null) {
             uOrders = new ConcurrentHashMap<>();
@@ -78,7 +78,7 @@ public class OrderService {
         }
         // 从UserOrders中删除
         ConcurrentMap<Long, OrderEntity> uOrders = userOrders.get(removed.userId);
-        if (uOrders != null) {
+        if (uOrders == null) {
             throw new IllegalArgumentException("User orders not found by orderId: " + removed.userId);
         }
         if (uOrders.remove(orderId) == null) {

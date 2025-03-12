@@ -11,17 +11,17 @@ import jakarta.annotation.Nullable;
 public class AbstractEvent extends AbstractMessage {
 
     /**
-     * Message id, set after sequenced
+     * 定序后的Sequence ID:
      */
     public long sequenceId;
 
     /**
-     * Previous message sequence id.
+     * 定序后的Previous Sequence ID:
      */
     public long previousId;
 
     /**
-     * Unique Id or null if not set
+     * 可选的全局唯一标识
      */
     @Nullable
     public String uniqueId;

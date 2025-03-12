@@ -3,7 +3,7 @@
 
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.zhaoyss</groupId>
-    <artifactId>build</artifactId>
+    <artifactId>Wrap-Exchange</artifactId>
     <version>1.0</version>
     <packaging>pom</packaging>
     <name>Wrap Exchange</name>
@@ -16,5 +16,6 @@
         <module>../config</module>
         <module>../common</module>
         <module>../trading-engine</module>
+        <module>../trading-sequencer</module>
     </modules>
 </project>

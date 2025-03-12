@@ -18,6 +18,9 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * @author zhaoyss
@@ -38,6 +41,7 @@ public class TradingEngineServiceTest {
     public void testTradingEngine() {
         var engine = createTradingEngine();
 
+        // 初始化 Asset
         engine.processEvent(depositEvent(USER_A, AssetEnum.USD, bd("58000")));
         engine.processEvent(depositEvent(USER_B, AssetEnum.USD, bd("126700")));
         engine.processEvent(depositEvent(USER_C, AssetEnum.BTC, bd("5.5")));
@@ -46,30 +50,65 @@ public class TradingEngineServiceTest {
         engine.debug();
         engine.validate();
 
+        // 创建订单：撮合，清算，异步写入DB
         engine.processEvent(orderRequestEvent(USER_A, Direction.BUY, bd("2207.33"), bd("1.2")));
         engine.processEvent(orderRequestEvent(USER_C, Direction.SELL, bd("2215.6"), bd("0.8")));
         engine.processEvent(orderRequestEvent(USER_C, Direction.SELL, bd("2921.1"), bd("0.3")));
 
-//        engine.debug();
-//        engine.validate();
+        engine.debug();
+        engine.validate();
 
         engine.processEvent(orderRequestEvent(USER_D, Direction.SELL, bd("2206"), bd("0.3")));
 
-//        engine.debug();
-//        engine.validate();
+        engine.debug();
+        engine.validate();
 
         engine.processEvent(orderRequestEvent(USER_B, Direction.BUY, bd("2219.6"), bd("2.4")));
-//
-//        engine.debug();
-//        engine.validate();
+
+        engine.debug();
+        engine.validate();
 
         engine.processEvent(orderCancelEvent(USER_A, 1L));
 
-//        engine.debug();
-//        engine.validate();
+        engine.debug();
+        engine.validate();
     }
+
     BigDecimal bd(String s) {
         return new BigDecimal(s);
+    }
+
+    @Test
+    public void testRandom() {
+        var engine = createTradingEngine();
+        var r = new Random(123456789);
+        for (Long user : USERS) {
+            engine.processEvent(depositEvent(user, AssetEnum.USD, random(r, 1000_0000, 2000_0000)));
+            engine.processEvent(depositEvent(user, AssetEnum.BTC, random(r, 1000, 2000)));
+        }
+        engine.debug();
+        engine.validate();
+
+        int low = 20000;
+        int high = 40000;
+        for (int i = 0; i < 100; i++) {
+            Long user = USERS[i % USERS.length];
+            engine.processEvent(orderRequestEvent(user, Direction.BUY, random(r, low, high), random(r, 1, 5)));
+            engine.debug();
+            engine.validate();
+
+            engine.processEvent(orderRequestEvent(user, Direction.SELL, random(r, low, high), random(r, 1, 5)));
+            engine.debug();
+            engine.validate();
+        }
+
+        assertEquals("35216.4", engine.matchEngine.marketPrice.stripTrailingZeros().toPlainString());
+    }
+
+    BigDecimal random(Random random, int low, int high) {
+        int n = random.nextInt(low, high);
+        int m = random.nextInt(100);
+        return new BigDecimal(n + "." + m);
     }
 
     OrderRequestEvent orderRequestEvent(Long userId, Direction direction, BigDecimal price, BigDecimal quantity) {
@@ -89,15 +128,14 @@ public class TradingEngineServiceTest {
     }
 
 
-    TransferEvent depositEvent(Long userId, AssetEnum asset, BigDecimal amount){
+    TransferEvent depositEvent(Long userId, AssetEnum asset, BigDecimal amount) {
         var event = createEvent(TransferEvent.class);
         event.fromUserId = UserType.DEBT.getInternalUserId();
-        event.fromUserId = userId;
+        event.toUserId = userId;
         event.amount = amount;
         event.asset = asset;
         event.sufficient = false;
         return event;
-
     }
 
     private long currentSequenceId = 0;

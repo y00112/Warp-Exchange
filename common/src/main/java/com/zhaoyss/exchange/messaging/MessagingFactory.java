@@ -59,7 +59,6 @@ public class MessagingFactory extends LoggerSupport {
                 if (!allTopics.contains(topic.name())) {
                     newTopics.add(new NewTopic(topic.name(), topic.getPartitions(), (short) 1));
                 }
-
             }
             if (!newTopics.isEmpty()) {
                 client.createTopics(newTopics);
@@ -121,7 +120,6 @@ public class MessagingFactory extends LoggerSupport {
         listenerContainer.start();
         return listenerContainer::stop;
     }
-
 }
 
 class KafkaListenerEndpointAdapter implements KafkaListenerEndpoint {
