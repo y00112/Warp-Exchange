@@ -17,5 +17,6 @@
         <module>../common</module>
         <module>../trading-engine</module>
         <module>../trading-sequencer</module>
+        <module>../trading-api</module>
     </modules>
 </project>

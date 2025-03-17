@@ -8,6 +8,7 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="trading-engine" />
+        <module name="trading-api" />
         <module name="ui" />
         <module name="common" />
         <module name="trading-sequencer" />
@@ -19,6 +20,7 @@
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="common" options="-parameters" />
       <module name="config" options="-parameters" />
+      <module name="trading-api" options="-parameters" />
       <module name="trading-engine" options="-parameters" />
       <module name="trading-sequencer" options="-parameters" />
       <module name="ui" options="-parameters" />
