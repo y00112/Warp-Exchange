@@ -18,6 +18,7 @@ import java.math.BigDecimal;
  */
 @Entity
 @Table(name = "orders")
+@Data
 public class OrderEntity implements EntitySupport, Comparable<OrderEntity> {
 
     // 订单ID / 定序ID / 用户ID

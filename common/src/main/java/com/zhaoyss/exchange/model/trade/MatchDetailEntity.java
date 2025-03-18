@@ -4,6 +4,7 @@ import com.zhaoyss.exchange.enums.Direction;
 import com.zhaoyss.exchange.enums.MatchType;
 import com.zhaoyss.exchange.model.support.EntitySupport;
 import jakarta.persistence.*;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
  * @date 4/3/2025 上午 9:54
  * @description: 存储每个订单的只读匹配详细信息
  */
+@Data
 @Entity
 @Table(name = "match_details", uniqueConstraints = @UniqueConstraint(name = "UNI_OID_COID", columnNames = {"orderId", "counterOrderId"})
         , indexes = @Index(name = "IDX_OID_CT", columnList = "orderId,createAt"))
